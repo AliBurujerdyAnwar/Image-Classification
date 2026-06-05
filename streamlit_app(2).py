@@ -2,19 +2,46 @@ import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image
+import gdown
 import os
 
+# =====================================================
+# KONFIGURASI
+# =====================================================
+
 st.set_page_config(
-    page_title="Image Classification",
-    page_icon="🖼️",
+    page_title="Concrete Crack Classification",
+    page_icon="🔍",
     layout="wide"
 )
 
-MODEL_FILE = "load_image_classification_model.h5"
+# =====================================================
+# GOOGLE DRIVE MODEL
+# =====================================================
+
+# Ganti dengan ID file Google Drive Anda
+FILE_ID = "https://drive.google.com/file/d/1p2SdclWeEJUPt_zn5m0Pz6DwwrxrqJHC/view?usp=sharing"
+
+MODEL_PATH = "model.h5"
 
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model(MODEL_FILE)
+
+    # Download model jika belum ada
+    if not os.path.exists(MODEL_PATH):
+
+        url = f"https://drive.google.com/uc?id={https://drive.google.com/file/d/1p2SdclWeEJUPt_zn5m0Pz6DwwrxrqJHC/view?usp=sharing}"
+
+        with st.spinner("Mengunduh model dari Google Drive..."):
+            gdown.download(
+                url,
+                MODEL_PATH,
+                quiet=False
+            )
+
+    model = tf.keras.models.load_model(MODEL_PATH)
+
+    return model
 
 try:
     model = load_model()
@@ -22,62 +49,87 @@ except Exception as e:
     st.error(f"Gagal memuat model: {e}")
     st.stop()
 
-target_size = (128, 128)
-class_labels = {0: "negative", 1: "positive"}
+# =====================================================
+# PARAMETER MODEL
+# =====================================================
 
-def predict_image(img):
-    img = img.convert("RGB")
-    img = img.resize(target_size)
+IMG_SIZE = (128, 128)
 
-    img_array = np.array(img).astype("float32") / 255.0
+CLASS_NAMES = [
+    "Negative",
+    "Positive"
+]
+
+# =====================================================
+# FUNGSI PREDIKSI
+# =====================================================
+
+def predict_image(image):
+
+    image = image.convert("RGB")
+    image = image.resize(IMG_SIZE)
+
+    img_array = np.array(image)
+
+    img_array = img_array.astype(np.float32) / 255.0
+
     img_array = np.expand_dims(img_array, axis=0)
 
     prediction = model.predict(img_array, verbose=0)
+
     probability = float(prediction[0][0])
 
-    if probability > 0.5:
-        predicted_class = 1
+    if probability >= 0.5:
+        label = CLASS_NAMES[1]
         confidence = probability
     else:
-        predicted_class = 0
+        label = CLASS_NAMES[0]
         confidence = 1 - probability
 
-    return class_labels[predicted_class], confidence, probability
+    return label, confidence, probability
 
-st.title("🔍 Concrete Crack Image Classification")
+# =====================================================
+# STREAMLIT UI
+# =====================================================
 
-st.write(
-    "Unggah gambar untuk melakukan klasifikasi menggunakan model "
-    "`load_image_classification_model.h5`."
-)
+st.title("🔍 Concrete Crack Classification")
 
 uploaded_file = st.file_uploader(
-    "Pilih gambar",
+    "Upload gambar",
     type=["jpg", "jpeg", "png"]
 )
 
-if uploaded_file is not None:
+if uploaded_file:
+
     image = Image.open(uploaded_file)
 
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns(2)
 
     with col1:
-        st.image(image, caption="Gambar Input", use_container_width=True)
+        st.image(
+            image,
+            caption="Input Image",
+            use_container_width=True
+        )
 
     with col2:
+
         label, confidence, probability = predict_image(image)
 
         st.subheader("Hasil Prediksi")
 
-        if label.lower() == "positive":
-            st.success(f"Positive")
+        if label == "Positive":
+            st.success(f"✅ {label}")
         else:
-            st.info(f"Negative")
+            st.info(f"❌ {label}")
 
-        st.metric("Confidence", f"{confidence*100:.2f}%")
-        st.write(f"Raw Probability: {probability:.4f}")
+        st.metric(
+            "Confidence",
+            f"{confidence*100:.2f}%"
+        )
 
-        st.progress(min(max(probability, 0.0), 1.0))
+        st.progress(confidence)
 
-st.markdown("---")
-st.caption("Dikonversi dari notebook Jupyter ke Streamlit")
+        st.write(
+            f"Raw Probability: {probability:.4f}"
+        )
